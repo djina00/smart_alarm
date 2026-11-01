@@ -5,7 +5,8 @@
   "parts": [
     { "type": "board-esp32-s3-devkitc-1", "id": "esp", "top": 0, "left": 0, "attrs": { "flashSize": "16" } },
     { "type": "wokwi-pir-motion-sensor", "id": "pir1", "top": -120, "left": 160, "attrs": {} },
-    { "type": "wokwi-buzzer", "id": "bz1", "top": -110, "left": -110, "attrs": { "volume": "0.2" } }
+    { "type": "wokwi-buzzer", "id": "bz1", "top": -110, "left": -110, "attrs": { "volume": "0.2" } },
+    { "type": "wokwi-pushbutton", "id": "btn1", "top": 200, "left": 160, "attrs": { "color": "green", "label": "BOOT" } }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
@@ -14,7 +15,9 @@
     [ "pir1:GND", "esp:GND.1", "black", [] ],
     [ "pir1:OUT", "esp:4", "green", [] ],
     [ "bz1:2", "esp:3V3.1", "red", [] ],
-    [ "bz1:1", "esp:5", "green", [] ]
+    [ "bz1:1", "esp:5", "green", [] ],
+    [ "btn1:1.l", "esp:0", "blue", [] ],
+    [ "btn1:2.l", "esp:GND.2", "black", [] ]
   ],
   "dependencies": {}
 }
