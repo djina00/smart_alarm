@@ -1,0 +1,18 @@
+menu "Pametni alarm"
+
+    config ALARM_WIFI_SSID
+        string "Podrazumevani WiFi SSID"
+        default "Wokwi-GUEST"
+        help
+            Ime WiFi mreže koje se upisuje u NVS pri prvom pokretanju,
+            ako u NVS-u još nema sačuvanih podataka. Posle toga uređaj
+            podatke uvek čita iz NVS-a.
+
+    config ALARM_WIFI_PASSWORD
+        string "Podrazumevana WiFi lozinka"
+        default ""
+        help
+            Lozinka WiFi mreže koja se upisuje u NVS pri prvom pokretanju.
+            Prazno znači otvorena mreža (npr. Wokwi-GUEST u simulatoru).
+
+endmenu

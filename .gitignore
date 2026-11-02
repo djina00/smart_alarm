@@ -1,4 +1,6 @@
 build/
+# sdkconfig se pravi lokalno iz sdkconfig.defaults i može sadržati WiFi lozinku
+sdkconfig
 sdkconfig.old
 managed_components/
 dependencies.lock
