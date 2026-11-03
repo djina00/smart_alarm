@@ -5,6 +5,7 @@
  *   inputs - čita PIR senzor i dugme (preko prekida) i šalje događaje
  *   alarm  - mašina stanja: ISKLJUCEN -> UKLJUCEN -> ALARM
  *   siren  - upravlja zujalicom (sirena i kratki piskovi)
+ *   comm   - MQTT: šalje događaje serveru i prima komande
  * WiFi radi u pozadini (ESP-IDF event loop), a podaci o mreži
  * čitaju se iz NVS memorije.
  *
@@ -17,6 +18,7 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "alarm.h"
+#include "comm.h"
 #include "inputs.h"
 #include "siren.h"
 #include "wifi.h"
@@ -47,8 +49,9 @@ void app_main(void)
     alarm_init();
     inputs_init();
 
-    // Alarm radi i bez mreže; WiFi se povezuje u pozadini
+    // Alarm radi i bez mreže; WiFi i MQTT se povezuju u pozadini
     wifi_init();
+    comm_init();
 
     ESP_LOGI(TAG, "Pritisni dugme da ukljucis/iskljucis alarm");
 }

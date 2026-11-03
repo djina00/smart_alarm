@@ -4,6 +4,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
+#include "comm.h"
 #include "siren.h"
 
 // Posle ovoliko vremena sirena se sama gasi, a alarm ostaje uključen
@@ -31,6 +32,28 @@ static void set_state(alarm_state_t new_state)
 {
     ESP_LOGW(TAG, "Stanje: %s -> %s", state_name(state), state_name(new_state));
     state = new_state;
+    comm_publish_state(new_state);
+}
+
+static void arm(void)
+{
+    if (state != ALARM_STATE_DISARMED) {
+        ESP_LOGI(TAG, "Alarm je vec ukljucen");
+        return;
+    }
+    set_state(ALARM_STATE_ARMED);
+    siren_command(SIREN_CMD_BEEP_ONCE);
+}
+
+static void disarm(void)
+{
+    if (state == ALARM_STATE_DISARMED) {
+        ESP_LOGI(TAG, "Alarm je vec iskljucen");
+        return;
+    }
+    // Iz stanja UKLJUCEN ili ALARM ide se u ISKLJUCEN
+    set_state(ALARM_STATE_DISARMED);
+    siren_command(SIREN_CMD_BEEP_TWICE);
 }
 
 static void handle_event(alarm_event_t event)
@@ -39,6 +62,8 @@ static void handle_event(alarm_event_t event)
     case ALARM_EVENT_MOTION:
         if (state == ALARM_STATE_ARMED) {
             ESP_LOGW(TAG, "Pokret dok je alarm ukljucen!");
+            // Serveru se šalje samo pokret detektovan dok je alarm uključen
+            comm_publish_motion(state);
             set_state(ALARM_STATE_TRIGGERED);
             siren_command(SIREN_CMD_ALARM);
             siren_deadline = xTaskGetTickCount() + pdMS_TO_TICKS(SIREN_MAX_DURATION_MS);
@@ -50,13 +75,18 @@ static void handle_event(alarm_event_t event)
 
     case ALARM_EVENT_TOGGLE_ARM:
         if (state == ALARM_STATE_DISARMED) {
-            set_state(ALARM_STATE_ARMED);
-            siren_command(SIREN_CMD_BEEP_ONCE);
+            arm();
         } else {
-            // Iz stanja UKLJUCEN ili ALARM ide se u ISKLJUCEN
-            set_state(ALARM_STATE_DISARMED);
-            siren_command(SIREN_CMD_BEEP_TWICE);
+            disarm();
         }
+        break;
+
+    case ALARM_EVENT_ARM:
+        arm();
+        break;
+
+    case ALARM_EVENT_DISARM:
+        disarm();
         break;
     }
 }
@@ -96,4 +126,9 @@ void alarm_post_event(alarm_event_t event)
     if (xQueueSend(event_queue, &event, 0) != pdTRUE) {
         ESP_LOGE(TAG, "Red dogadjaja je pun, dogadjaj odbacen");
     }
+}
+
+alarm_state_t alarm_get_state(void)
+{
+    return state;
 }

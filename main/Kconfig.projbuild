@@ -15,4 +15,24 @@ menu "Pametni alarm"
             Lozinka WiFi mreže koja se upisuje u NVS pri prvom pokretanju.
             Prazno znači otvorena mreža (npr. Wokwi-GUEST u simulatoru).
 
+    config ALARM_DEVICE_ID
+        string "ID uređaja"
+        default "alarm-01"
+        help
+            Jedinstveno ime uređaja. Koristi se kao MQTT client ID
+            i kao deo MQTT tema.
+
+    config ALARM_MQTT_BROKER_URI
+        string "Adresa MQTT brokera"
+        default "mqtt://broker.hivemq.com"
+        help
+            Adresa MQTT brokera, npr. mqtt://192.168.1.10:1883.
+            Podrazumevano je javni test broker (samo za testiranje).
+
+    config ALARM_MQTT_TOPIC_ROOT
+        string "Početak MQTT tema"
+        default "smart_alarm"
+        help
+            Teme su oblika <početak>/<ID uređaja>/events, /status i /cmd.
+
 endmenu
