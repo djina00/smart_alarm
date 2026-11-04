@@ -1,0 +1,51 @@
+# Serverski deo pametnog alarma: MQTT broker, baza i bekend.
+# Pokretanje iz foldera server/:  docker compose up -d --build
+name: smart_alarm
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  db:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smart_alarm}
+      POSTGRES_USER: ${POSTGRES_USER:-alarm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alarm}
+    ports:
+      - "5432:5432"
+    volumes:
+      # init.sql se izvršava samo pri prvom pokretanju (prazna baza)
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      # Za test sa Wokwi simulatorom u .env stavi MQTT_URL=mqtt://broker.hivemq.com
+      MQTT_URL: ${MQTT_URL:-mqtt://mosquitto:1883}
+      MQTT_TOPIC_ROOT: ${MQTT_TOPIC_ROOT:-smart_alarm}
+      PGHOST: db
+      PGDATABASE: ${POSTGRES_DB:-smart_alarm}
+      PGUSER: ${POSTGRES_USER:-alarm}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-alarm}
+    depends_on:
+      db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  db-data:
