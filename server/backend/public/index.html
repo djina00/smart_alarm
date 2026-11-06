@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="sr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pametni alarm</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Pametni alarm</h1>
+    <label>
+      Uređaj
+      <select id="device-select"></select>
+    </label>
+  </header>
+
+  <main>
+    <section class="card" id="status-card">
+      <h2>Trenutno stanje</h2>
+      <div class="status-row">
+        <span id="state-badge" class="badge">–</span>
+        <span id="online-badge" class="badge">–</span>
+      </div>
+      <p class="muted">Poslednje javljanje uređaja: <span id="updated-at">–</span></p>
+      <div class="buttons">
+        <button id="arm-btn" type="button">Uključi alarm</button>
+        <button id="disarm-btn" type="button" class="secondary">Isključi alarm</button>
+      </div>
+      <p id="command-msg" class="muted" role="status"></p>
+    </section>
+
+    <section class="card">
+      <h2>Pokreti po satu (poslednja 24 h)</h2>
+      <canvas id="hourly-chart"></canvas>
+    </section>
+
+    <section class="card">
+      <h2>Poslednji događaji</h2>
+      <table>
+        <thead>
+          <tr><th>Vreme</th><th>Događaj</th><th>Stanje</th></tr>
+        </thead>
+        <tbody id="events-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/vendor/chart.js/chart.umd.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+:root {
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --text: #1f2328;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #2563eb;
+  --ok: #15803d;
+  --warn: #b45309;
+  --danger: #b91c1c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+
+main {
+  display: grid;
+  gap: 16px;
+  max-width: 960px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.status-row { display: flex; gap: 8px; margin-bottom: 8px; }
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+  background: var(--border);
+}
+.badge.disarmed { background: #e5e7eb; color: #374151; }
+.badge.armed { background: #dcfce7; color: var(--ok); }
+.badge.triggered { background: #fee2e2; color: var(--danger); }
+.badge.online { background: #dbeafe; color: var(--accent); }
+.badge.offline { background: #fef3c7; color: var(--warn); }
+
+.muted { color: var(--muted); font-size: 14px; margin: 4px 0; }
+
+.buttons { display: flex; gap: 8px; margin-top: 12px; }
+
+button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+button.secondary { background: #4b5563; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+select { margin-left: 8px; padding: 4px 8px; font-size: 14px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; }

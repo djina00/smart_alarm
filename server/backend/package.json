@@ -1,13 +1,15 @@
 {
   "name": "smart-alarm-backend",
   "version": "1.0.0",
-  "description": "Bekend pametnog alarma: prima MQTT događaje i upisuje ih u TimescaleDB",
+  "description": "Bekend pametnog alarma: prima MQTT događaje, upisuje ih u TimescaleDB i služi kontrolnu tablu",
   "main": "src/index.js",
   "private": true,
   "scripts": {
     "start": "node src/index.js"
   },
   "dependencies": {
+    "chart.js": "4.4.6",
+    "express": "4.21.2",
     "mqtt": "5.10.1",
     "pg": "8.13.1"
   }

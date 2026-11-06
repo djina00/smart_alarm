@@ -32,6 +32,8 @@ services:
 
   backend:
     build: ./backend
+    ports:
+      - "3000:3000"   # kontrolna tabla i REST API
     environment:
       # Za test sa Wokwi simulatorom u .env stavi MQTT_URL=mqtt://broker.hivemq.com
       MQTT_URL: ${MQTT_URL:-mqtt://mosquitto:1883}

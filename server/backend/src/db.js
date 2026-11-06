@@ -24,4 +24,37 @@ async function upsertStatus(deviceId, online, state) {
   );
 }
 
-module.exports = { pool, insertEvent, upsertStatus };
+async function getDevices() {
+  const { rows } = await pool.query(
+    'SELECT device_id, online, state, updated_at FROM device_status ORDER BY device_id'
+  );
+  return rows;
+}
+
+async function getEvents(deviceId, limit) {
+  const { rows } = await pool.query(
+    `SELECT time, type, state FROM alarm_events
+     WHERE device_id = $1
+     ORDER BY time DESC
+     LIMIT $2`,
+    [deviceId, limit]
+  );
+  return rows;
+}
+
+// time_bucket je TimescaleDB funkcija: grupiše vremena u intervale (ovde po 1 sat)
+async function getHourlyMotion(deviceId, hours) {
+  const { rows } = await pool.query(
+    `SELECT time_bucket('1 hour', time) AS hour, count(*)::int AS motions
+     FROM alarm_events
+     WHERE device_id = $1
+       AND type = 'motion'
+       AND time > now() - make_interval(hours => $2)
+     GROUP BY hour
+     ORDER BY hour`,
+    [deviceId, hours]
+  );
+  return rows;
+}
+
+module.exports = { pool, insertEvent, upsertStatus, getDevices, getEvents, getHourlyMotion };
