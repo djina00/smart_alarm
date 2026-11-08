@@ -1,2 +1,4 @@
-idf_component_register(SRCS "comm.c" "main.c" "alarm.c" "siren.c" "inputs.c" "wifi.c"
-                       INCLUDE_DIRS ".")
+idf_component_register(SRCS "main.c"
+                       INCLUDE_DIRS "."
+                       REQUIRES nvs_flash esp_driver_gpio
+                                pir button siren alarm wifi_manager mqtt_service)

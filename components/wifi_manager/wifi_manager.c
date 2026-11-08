@@ -1,4 +1,4 @@
-#include "wifi.h"
+#include "wifi_manager.h"
 
 #include <string.h>
 #include "freertos/event_groups.h"
@@ -19,7 +19,7 @@
 
 #define WIFI_CONNECTED_BIT BIT0
 
-static const char *TAG = "wifi";
+static const char *TAG = "wifi_manager";
 
 static EventGroupHandle_t wifi_events;
 static TimerHandle_t retry_timer;
@@ -93,7 +93,7 @@ static void event_handler(void *arg, esp_event_base_t base, int32_t id, void *da
     }
 }
 
-void wifi_init(void)
+void wifi_manager_init(void)
 {
     wifi_events = xEventGroupCreate();
     retry_timer = xTimerCreate("wifi_retry", pdMS_TO_TICKS(1000), pdFALSE, NULL, retry_timer_cb);
@@ -126,7 +126,7 @@ void wifi_init(void)
     ESP_LOGI(TAG, "Povezujem se na mrezu \"%s\"...", ssid);
 }
 
-bool wifi_wait_connected(TickType_t timeout)
+bool wifi_manager_wait_connected(TickType_t timeout)
 {
     EventBits_t bits = xEventGroupWaitBits(wifi_events, WIFI_CONNECTED_BIT,
                                            pdFALSE, pdTRUE, timeout);

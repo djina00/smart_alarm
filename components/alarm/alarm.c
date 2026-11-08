@@ -4,7 +4,6 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
-#include "comm.h"
 #include "siren.h"
 
 // Posle ovoliko vremena sirena se sama gasi, a alarm ostaje uključen
@@ -17,6 +16,9 @@ static const char *TAG = "alarm";
 static QueueHandle_t event_queue;
 static alarm_state_t state = ALARM_STATE_DISARMED;
 static TickType_t siren_deadline;
+
+static alarm_state_cb_t state_cb;
+static alarm_motion_cb_t motion_cb;
 
 static const char *state_name(alarm_state_t s)
 {
@@ -32,7 +34,9 @@ static void set_state(alarm_state_t new_state)
 {
     ESP_LOGW(TAG, "Stanje: %s -> %s", state_name(state), state_name(new_state));
     state = new_state;
-    comm_publish_state(new_state);
+    if (state_cb != NULL) {
+        state_cb(new_state);
+    }
 }
 
 static void arm(void)
@@ -62,8 +66,10 @@ static void handle_event(alarm_event_t event)
     case ALARM_EVENT_MOTION:
         if (state == ALARM_STATE_ARMED) {
             ESP_LOGW(TAG, "Pokret dok je alarm ukljucen!");
-            // Serveru se šalje samo pokret detektovan dok je alarm uključen
-            comm_publish_motion(state);
+            // Dalje se javlja samo pokret detektovan dok je alarm uključen
+            if (motion_cb != NULL) {
+                motion_cb(state);
+            }
             set_state(ALARM_STATE_TRIGGERED);
             siren_command(SIREN_CMD_ALARM);
             siren_deadline = xTaskGetTickCount() + pdMS_TO_TICKS(SIREN_MAX_DURATION_MS);
@@ -115,20 +121,39 @@ static void alarm_task(void *arg)
     }
 }
 
-void alarm_init(void)
+esp_err_t alarm_init(alarm_state_cb_t on_state_change, alarm_motion_cb_t on_armed_motion)
 {
+    state_cb = on_state_change;
+    motion_cb = on_armed_motion;
+
     event_queue = xQueueCreate(EVENT_QUEUE_LENGTH, sizeof(alarm_event_t));
-    xTaskCreate(alarm_task, "alarm", 4096, NULL, 8, NULL);
+    if (event_queue == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    if (xTaskCreate(alarm_task, "alarm", 4096, NULL, 8, NULL) != pdPASS) {
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
 }
 
 void alarm_post_event(alarm_event_t event)
 {
-    if (xQueueSend(event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGE(TAG, "Red dogadjaja je pun, dogadjaj odbacen");
+    if (event_queue == NULL || xQueueSend(event_queue, &event, 0) != pdTRUE) {
+        ESP_LOGE(TAG, "Dogadjaj odbacen (red nije spreman ili je pun)");
     }
 }
 
 alarm_state_t alarm_get_state(void)
 {
     return state;
+}
+
+const char *alarm_state_code(alarm_state_t s)
+{
+    switch (s) {
+    case ALARM_STATE_DISARMED:  return "DISARMED";
+    case ALARM_STATE_ARMED:     return "ARMED";
+    case ALARM_STATE_TRIGGERED: return "TRIGGERED";
+    }
+    return "UNKNOWN";
 }

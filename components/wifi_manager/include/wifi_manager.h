@@ -5,7 +5,7 @@
 
 // Čita WiFi podatke iz NVS-a i pokreće povezivanje na mrežu.
 // NVS mora biti inicijalizovan pre poziva.
-void wifi_init(void);
+void wifi_manager_init(void);
 
 // Čeka da uređaj dobije IP adresu; vraća true ako je povezan
-bool wifi_wait_connected(TickType_t timeout);
+bool wifi_manager_wait_connected(TickType_t timeout);
