@@ -1,4 +1,4 @@
 idf_component_register(SRCS "main.c"
                        INCLUDE_DIRS "."
                        REQUIRES nvs_flash esp_driver_gpio
-                                pir button siren alarm wifi_manager mqtt_service)
+                                pir button buzzer alarm wifi_manager mqtt_service)

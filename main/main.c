@@ -1,16 +1,17 @@
 /*
  * Pametni kućni alarm
  *
- * Svaki deo sistema je posebna komponenta (folder components/):
- *   pir, button   - ulazi: javljaju pokret i pritisak dugmeta
- *   buzzer, siren - zujalica i ponašanje sirene (sirena, piskovi)
- *   alarm         - mašina stanja: ISKLJUCEN -> UKLJUCEN -> ALARM
+ * Komponente (folder components/):
+ *   pir, button   - čitanje PIR senzora i dugmeta
+ *   buzzer        - zujalica
+ *   alarm         - mašina stanja ISKLJUCEN -> UKLJUCEN -> ALARM i sirena
  *   wifi_manager  - WiFi, podaci o mreži se čitaju iz NVS-a
  *   mqtt_service  - MQTT: šalje događaje serveru i prima komande
  *
- * Komponente ne znaju jedna za drugu. main.c ih pokreće i povezuje
- * preko callback funkcija (funkcija koju komponenta pozove kad se
- * nešto desi).
+ * FreeRTOS taskovi:
+ *   sensor_task (ovde) - 10 puta u sekundi čita PIR i dugme
+ *   alarm (komponenta) - obrađuje događaje i upravlja sirenom
+ * Taskovi razmenjuju događaje preko reda (alarm_post_event).
  *
  * Povezivanje:
  *   PIR OUT        -> GPIO4
@@ -18,19 +19,24 @@
  *   Dugme BOOT     -> GPIO0 (na ploči)
  */
 
+#include <stdbool.h>
 #include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "alarm.h"
 #include "button.h"
+#include "buzzer.h"
 #include "mqtt_service.h"
 #include "pir.h"
-#include "siren.h"
 #include "wifi_manager.h"
 
 #define PIR_GPIO    GPIO_NUM_4
 #define BUZZER_GPIO GPIO_NUM_5
 #define BUTTON_GPIO GPIO_NUM_0
+
+#define SENSOR_PERIOD_MS 100
 
 static const char *TAG = "main";
 
@@ -39,55 +45,52 @@ static void nvs_init(void)
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         // NVS particija je puna ili iz starije verzije: obriši i počni ispočetka
-        ESP_LOGW(TAG, "NVS se brise i ponovo inicijalizuje");
         ESP_ERROR_CHECK(nvs_flash_erase());
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(err);
 }
 
-// --- Veze između komponenti ---
-
-// PIR -> alarm
-static void on_motion(void)
+// Alarm -> server: pokret dok je alarm uključen ili novo stanje
+static void on_alarm_report(const char *type, alarm_state_t state)
 {
-    alarm_post_event(ALARM_EVENT_MOTION);
+    mqtt_service_publish(type, alarm_state_code(state));
 }
 
-// Dugme -> alarm
-static void on_button_press(void)
-{
-    alarm_post_event(ALARM_EVENT_TOGGLE_ARM);
-}
-
-// Alarm -> MQTT: novo stanje
-static void on_alarm_state_change(alarm_state_t new_state)
-{
-    mqtt_service_publish_state(alarm_state_code(new_state));
-}
-
-// Alarm -> MQTT: pokret dok je alarm uključen
-static void on_armed_motion(alarm_state_t state)
-{
-    mqtt_service_publish_motion(alarm_state_code(state));
-}
-
-// MQTT -> alarm: komanda sa servera
+// Server -> alarm: komanda "arm" ili "disarm"
 static void on_server_command(const char *cmd)
 {
     if (strcmp(cmd, "arm") == 0) {
         alarm_post_event(ALARM_EVENT_ARM);
     } else if (strcmp(cmd, "disarm") == 0) {
         alarm_post_event(ALARM_EVENT_DISARM);
-    } else {
-        ESP_LOGW(TAG, "Nepoznata komanda: %s", cmd);
     }
 }
 
-// MQTT pita za trenutno stanje kad se poveže na broker
-static const char *current_state_code(void)
+// Čita senzore i javlja alarmu samo trenutak kad pokret počne,
+// odnosno kad se dugme pritisne (prelaz iz "ne" u "da")
+static void sensor_task(void *arg)
 {
-    return alarm_state_code(alarm_get_state());
+    bool last_motion = false;
+    bool last_button = false;
+
+    while (1) {
+        bool motion = pir_motion_detected();
+        bool button = button_is_pressed();
+
+        if (motion && !last_motion) {
+            ESP_LOGI(TAG, "PIR: pokret");
+            alarm_post_event(ALARM_EVENT_MOTION);
+        }
+        if (button && !last_button) {
+            ESP_LOGI(TAG, "Dugme pritisnuto");
+            alarm_post_event(ALARM_EVENT_BUTTON);
+        }
+
+        last_motion = motion;
+        last_button = button;
+        vTaskDelay(pdMS_TO_TICKS(SENSOR_PERIOD_MS));
+    }
 }
 
 void app_main(void)
@@ -96,16 +99,16 @@ void app_main(void)
 
     nvs_init();
 
-    // Redosled je bitan: sirena i alarm moraju postojati pre nego što
-    // ulazi počnu da šalju događaje
-    ESP_ERROR_CHECK(siren_init(BUZZER_GPIO));
-    ESP_ERROR_CHECK(alarm_init(on_alarm_state_change, on_armed_motion));
-    ESP_ERROR_CHECK(pir_init(PIR_GPIO, on_motion));
-    ESP_ERROR_CHECK(button_init(BUTTON_GPIO, on_button_press));
+    pir_init(PIR_GPIO);
+    button_init(BUTTON_GPIO);
+    ESP_ERROR_CHECK(buzzer_init(BUZZER_GPIO));
+
+    alarm_init(on_alarm_report);
 
     // Alarm radi i bez mreže; WiFi i MQTT se povezuju u pozadini
     wifi_manager_init();
-    mqtt_service_init(on_server_command, current_state_code);
+    mqtt_service_init(on_server_command);
 
+    xTaskCreate(sensor_task, "sensor", 3072, NULL, 6, NULL);
     ESP_LOGI(TAG, "Pritisni dugme da ukljucis/iskljucis alarm");
 }

@@ -1,3 +1,3 @@
 idf_component_register(SRCS "alarm.c"
                        INCLUDE_DIRS "include"
-                       PRIV_REQUIRES siren)
+                       PRIV_REQUIRES buzzer)

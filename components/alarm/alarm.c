@@ -1,24 +1,24 @@
 #include "alarm.h"
 
+#include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
-#include "siren.h"
+#include "buzzer.h"
 
-// Posle ovoliko vremena sirena se sama gasi, a alarm ostaje uključen
-#define SIREN_MAX_DURATION_MS 60000
-
-#define EVENT_QUEUE_LENGTH 10
+#define SIREN_TOGGLE_MS   400     // sirena: 400 ms pišti, 400 ms ćuti
+#define SIREN_MAX_MS      60000   // posle 60 s sirena se sama gasi
+#define BEEP_MS           150
 
 static const char *TAG = "alarm";
 
 static QueueHandle_t event_queue;
-static alarm_state_t state = ALARM_STATE_DISARMED;
-static TickType_t siren_deadline;
+static alarm_report_cb_t report_cb;
 
-static alarm_state_cb_t state_cb;
-static alarm_motion_cb_t motion_cb;
+static alarm_state_t state = ALARM_STATE_DISARMED;
+static TickType_t siren_start;
+static bool siren_sound_on;
 
 static const char *state_name(alarm_state_t s)
 {
@@ -30,34 +30,39 @@ static const char *state_name(alarm_state_t s)
     return "?";
 }
 
+// Kratki piskovi kao potvrda: 1 = uključen, 2 = isključen
+static void beep(int count)
+{
+    for (int i = 0; i < count; i++) {
+        buzzer_on();
+        vTaskDelay(pdMS_TO_TICKS(BEEP_MS));
+        buzzer_off();
+        vTaskDelay(pdMS_TO_TICKS(BEEP_MS));
+    }
+}
+
 static void set_state(alarm_state_t new_state)
 {
     ESP_LOGW(TAG, "Stanje: %s -> %s", state_name(state), state_name(new_state));
     state = new_state;
-    if (state_cb != NULL) {
-        state_cb(new_state);
-    }
+    report_cb("state", new_state);
 }
 
 static void arm(void)
 {
-    if (state != ALARM_STATE_DISARMED) {
-        ESP_LOGI(TAG, "Alarm je vec ukljucen");
-        return;
+    if (state == ALARM_STATE_DISARMED) {
+        set_state(ALARM_STATE_ARMED);
+        beep(1);
     }
-    set_state(ALARM_STATE_ARMED);
-    siren_command(SIREN_CMD_BEEP_ONCE);
 }
 
 static void disarm(void)
 {
-    if (state == ALARM_STATE_DISARMED) {
-        ESP_LOGI(TAG, "Alarm je vec iskljucen");
-        return;
+    if (state != ALARM_STATE_DISARMED) {
+        buzzer_off();
+        set_state(ALARM_STATE_DISARMED);
+        beep(2);
     }
-    // Iz stanja UKLJUCEN ili ALARM ide se u ISKLJUCEN
-    set_state(ALARM_STATE_DISARMED);
-    siren_command(SIREN_CMD_BEEP_TWICE);
 }
 
 static void handle_event(alarm_event_t event)
@@ -66,20 +71,18 @@ static void handle_event(alarm_event_t event)
     case ALARM_EVENT_MOTION:
         if (state == ALARM_STATE_ARMED) {
             ESP_LOGW(TAG, "Pokret dok je alarm ukljucen!");
-            // Dalje se javlja samo pokret detektovan dok je alarm uključen
-            if (motion_cb != NULL) {
-                motion_cb(state);
-            }
+            // Serveru se javlja samo pokret detektovan dok je alarm uključen
+            report_cb("motion", state);
             set_state(ALARM_STATE_TRIGGERED);
-            siren_command(SIREN_CMD_ALARM);
-            siren_deadline = xTaskGetTickCount() + pdMS_TO_TICKS(SIREN_MAX_DURATION_MS);
+            siren_start = xTaskGetTickCount();
+            siren_sound_on = true;
+            buzzer_on();
         } else if (state == ALARM_STATE_DISARMED) {
             ESP_LOGI(TAG, "Pokret, ali alarm je iskljucen (ignorise se)");
         }
-        // U stanju ALARM sirena već radi, novi pokret ništa ne menja
         break;
 
-    case ALARM_EVENT_TOGGLE_ARM:
+    case ALARM_EVENT_BUTTON:
         if (state == ALARM_STATE_DISARMED) {
             arm();
         } else {
@@ -97,55 +100,54 @@ static void handle_event(alarm_event_t event)
     }
 }
 
+// Poziva se svakih 400 ms dok je stanje ALARM
+static void siren_step(void)
+{
+    if (xTaskGetTickCount() - siren_start >= pdMS_TO_TICKS(SIREN_MAX_MS)) {
+        ESP_LOGW(TAG, "Sirena ugasena posle 60 s, alarm ostaje ukljucen");
+        buzzer_off();
+        siren_sound_on = false;
+        set_state(ALARM_STATE_ARMED);
+        return;
+    }
+
+    siren_sound_on = !siren_sound_on;
+    if (siren_sound_on) {
+        buzzer_on();
+    } else {
+        buzzer_off();
+    }
+}
+
 static void alarm_task(void *arg)
 {
-    ESP_LOGI(TAG, "Logika alarma pokrenuta, stanje: %s", state_name(state));
+    alarm_event_t event;
 
     while (1) {
-        // Dok sirena radi, čekamo događaj najduže do isteka vremena sirene
-        TickType_t wait = portMAX_DELAY;
-        if (state == ALARM_STATE_TRIGGERED) {
-            TickType_t now = xTaskGetTickCount();
-            wait = (siren_deadline > now) ? (siren_deadline - now) : 0;
-        }
+        // Dok traje alarm, budimo se svakih 400 ms da sirena pišti isprekidano;
+        // inače spavamo dok ne stigne događaj
+        TickType_t wait = (state == ALARM_STATE_TRIGGERED)
+                              ? pdMS_TO_TICKS(SIREN_TOGGLE_MS)
+                              : portMAX_DELAY;
 
-        alarm_event_t event;
         if (xQueueReceive(event_queue, &event, wait) == pdTRUE) {
             handle_event(event);
         } else if (state == ALARM_STATE_TRIGGERED) {
-            ESP_LOGW(TAG, "Sirena ugasena posle %d s, alarm ostaje ukljucen",
-                     SIREN_MAX_DURATION_MS / 1000);
-            siren_command(SIREN_CMD_OFF);
-            set_state(ALARM_STATE_ARMED);
+            siren_step();
         }
     }
 }
 
-esp_err_t alarm_init(alarm_state_cb_t on_state_change, alarm_motion_cb_t on_armed_motion)
+void alarm_init(alarm_report_cb_t on_report)
 {
-    state_cb = on_state_change;
-    motion_cb = on_armed_motion;
-
-    event_queue = xQueueCreate(EVENT_QUEUE_LENGTH, sizeof(alarm_event_t));
-    if (event_queue == NULL) {
-        return ESP_ERR_NO_MEM;
-    }
-    if (xTaskCreate(alarm_task, "alarm", 4096, NULL, 8, NULL) != pdPASS) {
-        return ESP_ERR_NO_MEM;
-    }
-    return ESP_OK;
+    report_cb = on_report;
+    event_queue = xQueueCreate(10, sizeof(alarm_event_t));
+    xTaskCreate(alarm_task, "alarm", 4096, NULL, 5, NULL);
 }
 
 void alarm_post_event(alarm_event_t event)
 {
-    if (event_queue == NULL || xQueueSend(event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGE(TAG, "Dogadjaj odbacen (red nije spreman ili je pun)");
-    }
-}
-
-alarm_state_t alarm_get_state(void)
-{
-    return state;
+    xQueueSend(event_queue, &event, 0);
 }
 
 const char *alarm_state_code(alarm_state_t s)

@@ -1,19 +1,12 @@
 #pragma once
 
 // Poziva se kad sa servera stigne komanda, npr. "arm" ili "disarm"
-typedef void (*mqtt_service_command_cb_t)(const char *cmd);
+typedef void (*mqtt_command_cb_t)(const char *cmd);
 
-// Vraća kod trenutnog stanja ("DISARMED", "ARMED"...); servis ga šalje
-// kao status svaki put kad se poveže na broker
-typedef const char *(*mqtt_service_state_cb_t)(void);
+// Priprema MQTT klijenta; povezivanje na broker počinje kad uređaj
+// dobije IP adresu na WiFi mreži
+void mqtt_service_init(mqtt_command_cb_t on_command);
 
-// Pravi MQTT klijenta i pokreće task za komunikaciju sa serverom.
-// Povezivanje na broker počinje kad uređaj dobije WiFi vezu.
-void mqtt_service_init(mqtt_service_command_cb_t on_command, mqtt_service_state_cb_t get_state);
-
-// Prijavljuje serveru detektovan pokret (dok je alarm uključen).
-// state_code mora biti stalni tekst (npr. iz alarm_state_code).
-void mqtt_service_publish_motion(const char *state_code);
-
-// Prijavljuje serveru novo stanje alarma
-void mqtt_service_publish_state(const char *state_code);
+// Šalje serveru događaj: type je "motion" ili "state",
+// state je kod stanja ("DISARMED", "ARMED", "TRIGGERED")
+void mqtt_service_publish(const char *type, const char *state);
